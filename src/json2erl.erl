@@ -15,6 +15,7 @@
 -define(NULL,  $n).
 -define(TRUE,  $t).
 -define(FALSE, $f).
+-define(STRING, $\").
 %-----------------------------------------------------------------------------
 -define(EXP, $E).
 -define(exp, $e).
@@ -62,6 +63,8 @@ decode_partial([Char|_TailStream]=Stream) ->
 				parse_number(Stream);
 		?MINUS ->
 			parse_number(Stream);
+		?STRING ->
+			parse_string(Stream);
 		_TODO ->
 			erlang:error(todo)
 	end.
@@ -142,7 +145,7 @@ parse_number_digit([], RevNumber) ->
 	{Number, []}.
 %-----------------------------------------------------------------------------
 parse_number_frac([], RevNumber) ->
-	Number = list_to_float(lists:reverse(RevNumber)),
+	Number = to_float(RevNumber),
 	
 	{Number, []};
 parse_number_frac([Char|TailStream], RevNumber) ->
@@ -202,3 +205,17 @@ to_float(RevList) ->
 to_int(RevList) ->
 	RevFloat = [?ZERO|[?DOT|RevList]],
 	to_float(RevFloat).
+%-----------------------------------------------------------------------------
+parse_string([?STRING|TailStream]) ->
+	parse_string_1(TailStream, []);
+parse_string(_) ->
+	erlang:error(badarg).
+%-----------------------------------------------------------------------------
+parse_string_1([?STRING|TailStream],RevString) ->
+	String = lists:reverse(RevString),
+
+	{String, TailStream};
+parse_string_1([Char|TailStream], RevString) ->
+	parse_string_1(TailStream, [Char|RevString]);
+parse_string_1(_,_) ->
+	erlang:error(badarg).
