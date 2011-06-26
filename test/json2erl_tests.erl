@@ -19,10 +19,11 @@ decode_test() ->
 	?assertEqual({ok, null}, json2erl:decode("null")),
 	?assertEqual({ok, true}, json2erl:decode("true")),
 	?assertEqual({ok, false},json2erl:decode("false")),
-	?assertEqual({ok, 10000}, json2erl:decode("10000")),
+	?assertEqual({ok, 10000.0}, json2erl:decode("10000")),
 	?assertEqual({ok, 1200.0}, json2erl:decode("1.2e+3")),
 	?assertEqual({ok, -150.4}, json2erl:decode("-150.4e0")),
-	?assertEqual({ok, 10000}, json2erl:decode("10000")),
-	?assertEqual({ok, -5}, json2erl:decode("-5"))
+	?assertEqual({ok, 10000.0}, json2erl:decode("10000")),
+
+	?assertEqual({ok, -5.0}, json2erl:decode("-5"))
  ].
 %-----------------------------------------------------------------------------

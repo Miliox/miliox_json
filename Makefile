@@ -6,7 +6,7 @@ SHELL=/bin/sh
 
 #Erlang Configuration
 PADIR=-pa ebin
-MODULELIST=[]
+MODULELIST=[json2erl]
 
 run: all_test
 	erl $(PADIR)
