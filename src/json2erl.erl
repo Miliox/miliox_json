@@ -23,11 +23,17 @@
 -define(LIST_END,   $]).
 -define(LIST_SEP,   $,).
 -define(LIST_FMT(List), {list, List}).
+-define(LIST_EMPTY(TailStream), [?LIST_START|[?LIST_END|TailStream]]).
 %-----------------------------------------------------------------------------
 -define(OBJ_START, ${).
 -define(OBJ_END,   $}).
--define(OBJ_SEP, $,).
+-define(OBJ_SEP,   $,).
+-define(OBJ_KV_SEP, $:).
 -define(OBJ_FMT(Object), {object, Object}).
+-define(OBJ_EMPTY(TailStream), [?OBJ_START|[?OBJ_END|TailStream]]).
+
+-define(NEW_OBJ, []).
+-define(STORE_OBJ(Key, Value, Obj), orddict:store(Key, Value, Obj)).
 %-----------------------------------------------------------------------------
 -define(EXP, $E).
 -define(exp, $e).
@@ -79,6 +85,8 @@ decode_partial([Char|_TailStream]=Stream) ->
 			parse_string(Stream);
 		?LIST_START ->
 			parse_list(Stream);
+		?OBJ_START ->
+			parse_obj(Stream);
 		_TODO ->
 			erlang:error(todo)
 	end.
@@ -234,7 +242,7 @@ parse_string_1([Char|TailStream], RevString) ->
 parse_string_1(_,_) ->
 	erlang:error(badarg).
 %-----------------------------------------------------------------------------
-parse_list([?LIST_START|[?LIST_END|TailStream]]) ->
+parse_list(?LIST_EMPTY(TailStream)) ->
 	{?LIST_FMT([]), TailStream};
 parse_list([?LIST_START|TailStream]) ->
 	parse_list(TailStream, []);
@@ -251,5 +259,25 @@ parse_list_sep([?LIST_END|TailStream], RevList) ->
 	List = lists:reverse(RevList),
 	{?LIST_FMT(List), TailStream};
 parse_list_sep(_,_) ->
+	erlang:error(badarg).
+%-----------------------------------------------------------------------------
+parse_obj(?OBJ_EMPTY(TailStream)) ->
+	{?OBJ_FMT(?NEW_OBJ), TailStream};
+parse_obj([?OBJ_START|TailStream]) ->
+	parse_obj(TailStream, ?NEW_OBJ);
+parse_obj(_) ->
+	erlang:error(badarg).
+%-----------------------------------------------------------------------------
+parse_obj(Stream, Object) ->
+	{Key, [?OBJ_KV_SEP|T1]} = parse_string(Stream),
+	{Value, TailStream} = decode_partial(T1),
+
+	parse_obj_sep(TailStream, ?STORE_OBJ(Key,Value, Object)).
+%-----------------------------------------------------------------------------
+parse_obj_sep([?OBJ_SEP|TailStream], Object) ->
+	parse_obj(TailStream, Object);
+parse_obj_sep([?OBJ_END|TailStream], Object) ->
+	{?OBJ_FMT(Object), TailStream};
+parse_obj_sep(_,_) ->
 	erlang:error(badarg).
 %-----------------------------------------------------------------------------
