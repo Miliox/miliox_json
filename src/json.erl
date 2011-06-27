@@ -8,7 +8,7 @@
 %% @author Emiliano Carlos de Moraes Firmino <elmiliox@gmail.com>
 %% @copyright Emiliano@2011
 
--module(json2erl).
+-module(json).
 -author("elmiliox@gmail.com").
 -vsn(1).
 
@@ -19,11 +19,11 @@
 -define(STRING_START, $\").
 -define(STRING_END,   $\").
 %-----------------------------------------------------------------------------
--define(LIST_START, $[).
--define(LIST_END,   $]).
--define(LIST_SEP,   $,).
--define(LIST_FMT(List), {list, List}).
--define(LIST_EMPTY(TailStream), [?LIST_START|[?LIST_END|TailStream]]).
+-define(ARRAY_START, $[).
+-define(ARRAY_END,   $]).
+-define(ARRAY_SEP,   $,).
+-define(ARRAY_FMT(Array), {array, Array}).
+-define(ARRAY_EMPTY(TailStream), [?ARRAY_START|[?ARRAY_END|TailStream]]).
 %-----------------------------------------------------------------------------
 -define(OBJ_START, ${).
 -define(OBJ_END,   $}).
@@ -31,7 +31,7 @@
 -define(OBJ_KV_SEP, $:).
 -define(OBJ_FMT(Object), {object, Object}).
 -define(OBJ_EMPTY(TailStream), [?OBJ_START|[?OBJ_END|TailStream]]).
-
+%-----------------------------------------------------------------------------
 -define(NEW_OBJ, []).
 -define(STORE_OBJ(Key, Value, Obj), orddict:store(Key, Value, Obj)).
 %-----------------------------------------------------------------------------
@@ -48,6 +48,9 @@
 -define(TRUE_MATCH(Tail), [$t|[$r|[$u|[$e|Tail]]]]).
 -define(FALSE_MATCH(Tail), [$f|[$a|[$l|[$s|[$e|Tail]]]]]).
 %-----------------------------------------------------------------------------
+-define(ERROR_ENCODED, erlang:throw(invalid_encoded)).
+-define(ERROR_UNEXPECTED, erlang:throw(char_unexpected)).
+%-----------------------------------------------------------------------------
 -define(HACK_EXP(ReverseNumber), [?EXP|[?ZERO|[?DOT|ReverseNumber]]]).
 -define(ZERO_FRAC, [?DOT, ?ZERO]).
 %-----------------------------------------------------------------------------
@@ -56,16 +59,14 @@
 decode(Stream) when is_binary(Stream) ->
 	decode(binary_to_list(Stream));
 decode(Stream) when is_list(Stream) ->
-	case decode_partial(Stream) of
+	case catch(decode_partial(Stream)) of
 		{Decoded, []} ->
 			{ok, Decoded};
-		{_, _} ->
-			{error, incomplete_parse};
 		_Error ->
-			{error, badarg}
+			error
 	end;
 decode(_) ->
-	{error, invalid_stream}.
+	error.
 %-----------------------------------------------------------------------------
 decode_partial([Char|_TailStream]=Stream) ->
 	case Char of
@@ -83,39 +84,41 @@ decode_partial([Char|_TailStream]=Stream) ->
 			parse_number(Stream);
 		?STRING_START ->
 			parse_string(Stream);
-		?LIST_START ->
-			parse_list(Stream);
+		?ARRAY_START ->
+			parse_array(Stream);
 		?OBJ_START ->
 			parse_obj(Stream);
-		_TODO ->
-			erlang:error(todo)
+		_Invalid ->
+			?ERROR_ENCODED
 	end.
 %-----------------------------------------------------------------------------
 parse_null(?NULL_MATCH(Tail)) ->
 	{null, Tail};
 parse_null(_) ->
-	erlang:error(badelement).
+	?ERROR_UNEXPECTED.
 %-----------------------------------------------------------------------------
 parse_true(?TRUE_MATCH(Tail)) ->
 	{true, Tail};
 parse_true(_) ->
-	erlang:error(badelement).
+	?ERROR_UNEXPECTED.
 %-----------------------------------------------------------------------------
 parse_false(?FALSE_MATCH(Tail)) ->
 	{false, Tail};
 parse_false(_) ->
-	erlang:error(badelement).
+	?ERROR_UNEXPECTED.
 %-----------------------------------------------------------------------------
 parse_number([Operator|TailStream]=Stream) ->
 	case Operator of
 		?MINUS ->
-			{Number, Tail} = parse_number_1(TailStream),
-			{-Number, Tail};
-		_NotOperator ->
+			{Absolute, Tail} = parse_number_1(TailStream),
+			Number = -Absolute,
+
+			{Number, Tail};
+		_->
 			parse_number_1(Stream)
 	end;
 parse_number(_) ->
-	erlang:error(badelement).
+	?ERROR_ENCODED.
 %-----------------------------------------------------------------------------
 parse_number_1([Char|TailStream]) ->
 	case Char of
@@ -126,10 +129,10 @@ parse_number_1([Char|TailStream]) ->
 			Digit =< ?NINE ->
 				parse_number_digit(TailStream, [Digit]);
 		_ ->
-			erlang:error(badarg)
+			?ERROR_ENCODED
 	end;
 parse_number_1(_) ->
-	erlang:error(badarg).
+	?ERROR_UNEXPECTED.
 %-----------------------------------------------------------------------------
 parse_number_2([]) ->
 	{0, []};
@@ -140,10 +143,10 @@ parse_number_2([Char|TailStream]) ->
 		E when E == ?EXP orelse E == ?exp ->
 			parse_number_exp(TailStream, ?HACK_EXP([?ZERO]));
 		_ ->
-			erlang:error(badarg)
+			?ERROR_UNEXPECTED
 	end;
 parse_number_2(_) ->
-	erlang:error(badarg).
+	?ERROR_UNEXPECTED.
 %-----------------------------------------------------------------------------
 parse_number_digit([Char|TailStream], RevNumber) ->
 	case Char of
@@ -199,10 +202,10 @@ parse_number_exp([Char|TailStream], RevNumber) ->
 			Digit =< ?NINE ->
 				parse_number_exp_1(TailStream, [Digit|RevNumber]);
 		_ ->
-			erlang:error(badarg)
+			?ERROR_ENCODED
 	end;
 parse_number_exp(_, _) ->
-	erlang:error(badarg).
+	?ERROR_UNEXPECTED.
 %-----------------------------------------------------------------------------
 parse_number_exp_1([], RevNumber) ->
 	Number = to_float(RevNumber),
@@ -220,57 +223,60 @@ parse_number_exp_1([Char|TailStream], RevNumber) ->
 			{Number, Stream}
 	end;
 parse_number_exp_1(_, _) ->
-	erlang:error(badarg).
+	?ERROR_UNEXPECTED.
 %-----------------------------------------------------------------------------
-to_float(RevList) ->
-	list_to_float(lists:reverse(RevList)).
-to_int(RevList) ->
-	RevFloat = [?ZERO|[?DOT|RevList]],
+to_float(RevArray) ->
+	list_to_float(lists:reverse(RevArray)).
+to_int(RevArray) ->
+	RevFloat = [?ZERO|[?DOT|RevArray]],
 	to_float(RevFloat).
 %-----------------------------------------------------------------------------
 parse_string([?STRING_START|TailStream]) ->
-	parse_string_1(TailStream, []);
+	parse_string(TailStream, []);
 parse_string(_) ->
-	erlang:error(badarg).
+	?ERROR_UNEXPECTED.
 %-----------------------------------------------------------------------------
-parse_string_1([?STRING_END|TailStream],RevString) ->
+parse_string([?STRING_END|TailStream],RevString) ->
 	String = lists:reverse(RevString),
 
 	{String, TailStream};
-parse_string_1([Char|TailStream], RevString) ->
-	parse_string_1(TailStream, [Char|RevString]);
-parse_string_1(_,_) ->
-	erlang:error(badarg).
+parse_string([Char|TailStream], RevString) ->
+	parse_string(TailStream, [Char|RevString]);
+parse_string(_,_) ->
+	?ERROR_UNEXPECTED.
 %-----------------------------------------------------------------------------
-parse_list(?LIST_EMPTY(TailStream)) ->
-	{?LIST_FMT([]), TailStream};
-parse_list([?LIST_START|TailStream]) ->
-	parse_list(TailStream, []);
-parse_list(_) ->
-	erlang:error(badarg).
+parse_array(?ARRAY_EMPTY(TailStream)) ->
+	{?ARRAY_FMT([]), TailStream};
+parse_array([?ARRAY_START|TailStream]) ->
+	parse_array(TailStream, []);
+parse_array(_) ->
+	?ERROR_UNEXPECTED.
 %-----------------------------------------------------------------------------
-parse_list(Stream, RevList) ->
+parse_array(Stream, RevArray) ->
 	{Item, TailStream} = decode_partial(Stream),
-	parse_list_sep(TailStream, [Item|RevList]).
+	parse_array_sep(TailStream, [Item|RevArray]).
 %-----------------------------------------------------------------------------
-parse_list_sep([?LIST_SEP|TailStream], RevList) ->
-	parse_list(TailStream, RevList);
-parse_list_sep([?LIST_END|TailStream], RevList) ->
-	List = lists:reverse(RevList),
-	{?LIST_FMT(List), TailStream};
-parse_list_sep(_,_) ->
-	erlang:error(badarg).
+parse_array_sep([?ARRAY_SEP|TailStream], RevArray) ->
+	parse_array(TailStream, RevArray);
+parse_array_sep([?ARRAY_END|TailStream], RevArray) ->
+	Array = lists:reverse(RevArray),
+	{?ARRAY_FMT(Array), TailStream};
+parse_array_sep(_,_) ->
+	?ERROR_UNEXPECTED.
 %-----------------------------------------------------------------------------
 parse_obj(?OBJ_EMPTY(TailStream)) ->
 	{?OBJ_FMT(?NEW_OBJ), TailStream};
 parse_obj([?OBJ_START|TailStream]) ->
 	parse_obj(TailStream, ?NEW_OBJ);
 parse_obj(_) ->
-	erlang:error(badarg).
+	?ERROR_ENCODED.
 %-----------------------------------------------------------------------------
 parse_obj(Stream, Object) ->
-	{Key, [?OBJ_KV_SEP|T1]} = parse_string(Stream),
-	{Value, TailStream} = decode_partial(T1),
+	{Key, KeyTailStream} = parse_string(Stream),
+
+	[?OBJ_KV_SEP|ValueStream] = KeyTailStream,
+
+	{Value, TailStream} = decode_partial(ValueStream),
 
 	parse_obj_sep(TailStream, ?STORE_OBJ(Key,Value, Object)).
 %-----------------------------------------------------------------------------
@@ -279,5 +285,5 @@ parse_obj_sep([?OBJ_SEP|TailStream], Object) ->
 parse_obj_sep([?OBJ_END|TailStream], Object) ->
 	{?OBJ_FMT(Object), TailStream};
 parse_obj_sep(_,_) ->
-	erlang:error(badarg).
+	?ERROR_ENCODED.
 %-----------------------------------------------------------------------------

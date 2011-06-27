@@ -8,22 +8,36 @@
 %% @author Emiliano Carlos de Moraes Firmino <elmiliox@gmail.com>
 %% @copyright Emiliano@2011
 
--module(json2erl_tests).
+-module(json_tests).
 -author("elmiliox@gmail.com").
 -vsn(1).
 
 -include_lib("eunit/include/eunit.hrl").
 %-----------------------------------------------------------------------------
 decode_test() ->
-[
-	?assertEqual({ok, null}, json2erl:decode("null")),
-	?assertEqual({ok, true}, json2erl:decode("true")),
-	?assertEqual({ok, false},json2erl:decode("false")),
-	?assertEqual({ok, 10000.0}, json2erl:decode("10000")),
-	?assertEqual({ok, 1200.0}, json2erl:decode("1.2e+3")),
-	?assertEqual({ok, -150.4}, json2erl:decode("-150.4e0")),
-	?assertEqual({ok, 10000.0}, json2erl:decode("10000")),
+	random:seed(),
 
-	?assertEqual({ok, -5.0}, json2erl:decode("-5"))
+	Number = random:uniform(),
+	NumberString = float_to_list(Number),
+
+[
+	%Primitive Test
+	?assertEqual({ok, null}, json:decode("null")),
+	?assertEqual({ok, true}, json:decode("true")),
+	?assertEqual({ok, false},json:decode("false")),
+
+	% Number Test
+	?assertEqual({ok, Number}, json:decode(NumberString)),
+	?assertEqual({ok, 540.0},  json:decode("54e+1")),
+	?assertEqual({ok, -5.0}, json:decode("-5")),
+	?assertEqual(error, json:decode("00")),
+	?assertEqual(error, json:decode("0.e+3")),
+
+	%Array Test
+	?assertEqual({ok, {array, []}}, json:decode("[]")),
+	?assertEqual({ok, {array, [1234.0,"teste"]}}, json:decode("[1234,\"teste\"]")),
+
+	%Object Test
+	?assertEqual({ok, {object, []}}, json:decode("{}"))
  ].
 %-----------------------------------------------------------------------------
