@@ -15,7 +15,19 @@
 -define(NULL,  $n).
 -define(TRUE,  $t).
 -define(FALSE, $f).
--define(STRING, $\").
+%-----------------------------------------------------------------------------
+-define(STRING_START, $\").
+-define(STRING_END,   $\").
+%-----------------------------------------------------------------------------
+-define(LIST_START, $[).
+-define(LIST_END,   $]).
+-define(LIST_SEP,   $,).
+-define(LIST_FMT(List), {list, List}).
+%-----------------------------------------------------------------------------
+-define(OBJ_START, ${).
+-define(OBJ_END,   $}).
+-define(OBJ_SEP, $,).
+-define(OBJ_FMT(Object), {object, Object}).
 %-----------------------------------------------------------------------------
 -define(EXP, $E).
 -define(exp, $e).
@@ -38,7 +50,7 @@
 decode(Stream) when is_binary(Stream) ->
 	decode(binary_to_list(Stream));
 decode(Stream) when is_list(Stream) ->
-	case catch(decode_partial(Stream)) of
+	case decode_partial(Stream) of
 		{Decoded, []} ->
 			{ok, Decoded};
 		{_, _} ->
@@ -63,8 +75,10 @@ decode_partial([Char|_TailStream]=Stream) ->
 				parse_number(Stream);
 		?MINUS ->
 			parse_number(Stream);
-		?STRING ->
+		?STRING_START ->
 			parse_string(Stream);
+		?LIST_START ->
+			parse_list(Stream);
 		_TODO ->
 			erlang:error(todo)
 	end.
@@ -206,12 +220,12 @@ to_int(RevList) ->
 	RevFloat = [?ZERO|[?DOT|RevList]],
 	to_float(RevFloat).
 %-----------------------------------------------------------------------------
-parse_string([?STRING|TailStream]) ->
+parse_string([?STRING_START|TailStream]) ->
 	parse_string_1(TailStream, []);
 parse_string(_) ->
 	erlang:error(badarg).
 %-----------------------------------------------------------------------------
-parse_string_1([?STRING|TailStream],RevString) ->
+parse_string_1([?STRING_END|TailStream],RevString) ->
 	String = lists:reverse(RevString),
 
 	{String, TailStream};
@@ -219,3 +233,23 @@ parse_string_1([Char|TailStream], RevString) ->
 	parse_string_1(TailStream, [Char|RevString]);
 parse_string_1(_,_) ->
 	erlang:error(badarg).
+%-----------------------------------------------------------------------------
+parse_list([?LIST_START|[?LIST_END|TailStream]]) ->
+	{?LIST_FMT([]), TailStream};
+parse_list([?LIST_START|TailStream]) ->
+	parse_list(TailStream, []);
+parse_list(_) ->
+	erlang:error(badarg).
+%-----------------------------------------------------------------------------
+parse_list(Stream, RevList) ->
+	{Item, TailStream} = decode_partial(Stream),
+	parse_list_sep(TailStream, [Item|RevList]).
+%-----------------------------------------------------------------------------
+parse_list_sep([?LIST_SEP|TailStream], RevList) ->
+	parse_list(TailStream, RevList);
+parse_list_sep([?LIST_END|TailStream], RevList) ->
+	List = lists:reverse(RevList),
+	{?LIST_FMT(List), TailStream};
+parse_list_sep(_,_) ->
+	erlang:error(badarg).
+%-----------------------------------------------------------------------------
