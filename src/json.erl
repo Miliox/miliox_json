@@ -18,6 +18,7 @@
 %-----------------------------------------------------------------------------
 -define(STRING_START, $\").
 -define(STRING_END,   $\").
+-define(REV_SOLIDUS, $\\).
 %-----------------------------------------------------------------------------
 -define(ARRAY_START, $[).
 -define(ARRAY_END,   $]).
@@ -59,7 +60,8 @@
 decode(Stream) when is_binary(Stream) ->
 	decode(binary_to_list(Stream));
 decode(Stream) when is_list(Stream) ->
-	case catch(decode_partial(Stream)) of
+	% case catch(decode_partial(Stream)) of
+	case decode_partial(Stream) of
 		{Decoded, []} ->
 			{ok, Decoded};
 		_Error ->
@@ -240,10 +242,70 @@ parse_string([?STRING_END|TailStream],RevString) ->
 	String = lists:reverse(RevString),
 
 	{String, TailStream};
+parse_string([?REV_SOLIDUS|Stream], RevString) ->
+	[EscapedChar|TailStream] = Stream,
+	case EscapedChar of
+		% Escaped Character that are used as Control Char
+		$"  -> parse_string(TailStream,  [$"|RevString]);
+		$/  -> parse_string(TailStream,  [$/|RevString]);
+		$\\ -> parse_string(TailStream, [$\\|RevString]);
+
+		% Valid Control Char
+		$b -> parse_string(TailStream,  [$\b|RevString]);
+		$f -> parse_string(TailStream,  [$\f|RevString]);
+		$n -> parse_string(TailStream,  [$\n|RevString]);
+		$r -> parse_string(TailStream,  [$\r|RevString]);
+		$t -> parse_string(TailStream,  [$\t|RevString]);
+
+		% Unicode Character Escape
+		$u -> 
+			{RevUnicoded, Tail} = parse_string_unicode(TailStream, 0, 4),
+			parse_string(Tail, RevUnicoded ++ RevString)
+	end;
 parse_string([Char|TailStream], RevString) ->
 	parse_string(TailStream, [Char|RevString]);
 parse_string(_,_) ->
 	?ERROR_UNEXPECTED.
+%-----------------------------------------------------------------------------
+parse_string_unicode(TailStream, CodeValue, Len) when Len =< 0 ->
+	% Warning: Low Level Operation ahead
+	% Please! visit www.fileformat.info/info/unicode/utf8.html
+	String = case CodeValue of
+		ASCII when ASCII > 0 andalso ASCII < 16#80 ->
+			[ASCII];
+		U07FF when U07FF >= 16#80 andalso U07FF < 16#800 ->
+			<<H:5,L:6>> = <<CodeValue:11>>, % 11Bits
+
+			First  = 2#11000000 bor H, % 110xxxxx (5 Higher Bits, 7~11)
+			Second = 2#10000000 bor L, % 10xxxxxx (6 Lower  Bits, 1~06)
+
+			[Second, First];
+		UFFFF when UFFFF >= 16#800 andalso UFFFF < 16#ffff ->
+			<<H:4,M:6,L:6>> = <<CodeValue:16>>, % 16Bits
+
+			First  = 2#11100000 bor H, %1110xxxx (4 Higher Bits, 13~16)
+			Second = 2#10000000 bor M, %10xxxxxx (Middle,  Bits 07~12)
+			Third  = 2#10000000 bor L, %10xxxxxx (6 Lower Bits, 01~06)
+
+			[Third, Second, First];
+		_ ->
+			?ERROR_UNEXPECTED
+	end,
+	{String, TailStream};
+parse_string_unicode([Hex|TailStream], OldCodeValue, Len) ->
+	Value = case Hex of
+		Decimal when Decimal >= $0 andalso Decimal =< $9 ->
+			Hex - $0;
+		UpHex when UpHex >= $A andalso UpHex =< $F ->
+			(Hex - $A) + 10;
+		LowHex when LowHex >= $a andalso LowHex =< $f ->
+			(Hex - $a) + 10;
+		_ ->
+			?ERROR_UNEXPECTED
+	end,
+	NewCodeValue = (OldCodeValue * 16) + Value,
+
+	parse_string_unicode(TailStream, NewCodeValue, Len-1).
 %-----------------------------------------------------------------------------
 parse_array(?ARRAY_EMPTY(TailStream)) ->
 	{?ARRAY_FMT([]), TailStream};
