@@ -60,8 +60,7 @@
 decode(Stream) when is_binary(Stream) ->
 	decode(binary_to_list(Stream));
 decode(Stream) when is_list(Stream) ->
-	% case catch(decode_partial(Stream)) of
-	case decode_partial(Stream) of
+	case catch(decode_partial(Stream)) of
 		{Decoded, []} ->
 			{ok, Decoded};
 		_Error ->
