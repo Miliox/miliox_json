@@ -491,5 +491,5 @@ encode_object_element(Key, Value) ->
 	JsonKey = encode_string(Key),
 	JsonValue = encode_partial(Value),
 
-	JsonKey ++ ?OBJ_KV_SEP ++ JsonValue.
+	JsonKey ++ [?OBJ_KV_SEP|JsonValue].
 %-----------------------------------------------------------------------------
