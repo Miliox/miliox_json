@@ -467,10 +467,10 @@ encode_array_item(Item) ->
 encode_object([]) ->
 	"{}";
 encode_object([{Key,Value}|Object]) ->
-	JsonElement = encode_object_element(Key, Value),
+	JsonMember= encode_object_member(Key, Value),
 	encode_object(
 		Object, 
-		lists:reverse([?OBJ_START|JsonElement])
+		lists:reverse([?OBJ_START|JsonMember])
 	);
 encode_object(_) ->
 	erlang:error(badarg).
@@ -478,7 +478,7 @@ encode_object(_) ->
 encode_object([], RevJson) ->
 	lists:reverse([?OBJ_END|RevJson]);
 encode_object([{Key,Value}|Object], RevJson) ->
-	JsonElement = encode_object_element(Key, Value),
+	JsonElement = encode_object_member(Key, Value),
 
 	encode_object(
 		Object, 
@@ -487,7 +487,7 @@ encode_object([{Key,Value}|Object], RevJson) ->
 encode_object(_, _) ->
 	erlang:error(badarg).
 %-----------------------------------------------------------------------------
-encode_object_element(Key, Value) ->
+encode_object_member(Key, Value) ->
 	JsonKey = encode_string(Key),
 	JsonValue = encode_partial(Value),
 
