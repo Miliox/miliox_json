@@ -382,8 +382,26 @@ encode_partial(Element) ->
 	end.
 %-----------------------------------------------------------------------------
 encode_number(Number) ->
-	Float = Number / 1.0,
-	float_to_list(Float).
+	Float = Number + 0.0,
+	encode_number_minify(float_to_list(Float), []).
+%-----------------------------------------------------------------------------
+encode_number_minify([?DOT|Fraction], RevNumber) ->
+	encode_number_min_frac(Fraction, RevNumber, [?DOT]);
+encode_number_minify([Digit|Number], RevNumber) ->
+	encode_number_minify(Number, [Digit|RevNumber]).
+%-----------------------------------------------------------------------------
+encode_number_min_frac([?ZERO|Fraction], RevNumber, RevFrac) ->
+	encode_number_min_frac(Fraction, RevNumber, [?ZERO|RevFrac]);
+encode_number_min_frac([?exp|Exp], RevNumber, _) ->
+	encode_number_min_e(Exp, RevNumber);
+encode_number_min_frac([Digit|Fraction], RevNumber, RevFrac) ->
+	encode_number_min_frac(Fraction, [Digit|RevFrac] ++ RevNumber, []).
+%-----------------------------------------------------------------------------
+encode_number_min_e(Exp, RevNumber) ->
+	case list_to_integer(Exp) of
+		0 -> lists:reverse(RevNumber);
+		E -> lists:reverse(RevNumber,[?exp|integer_to_list(E)])
+	end.
 %-----------------------------------------------------------------------------
 encode_string(ByteString) when is_binary(ByteString) ->
 	encode_string(binary_to_list(ByteString));
