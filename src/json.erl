@@ -246,8 +246,8 @@ parse_string([?REV_SOLIDUS|Stream], RevString) ->
 	[EscapedChar|TailStream] = Stream,
 	case EscapedChar of
 		% Escaped Character that are used as Control Char
-		$"  -> parse_string(TailStream,  [$"|RevString]);
-		$/  -> parse_string(TailStream,  [$/|RevString]);
+		$\" -> parse_string(TailStream, [$\"|RevString]);
+		$\/ -> parse_string(TailStream, [$\/|RevString]);
 		$\\ -> parse_string(TailStream, [$\\|RevString]);
 
 		% Valid Control Char
@@ -351,8 +351,8 @@ parse_obj_sep(_,_) ->
 %-----------------------------------------------------------------------------
 encode(Element) ->
 	case catch(encode_partial(Element)) of
-		Decoded when is_list(Decoded) ->
-			{ok, Decoded};
+		Json when is_list(Json) ->
+			{ok, Json};
 		{'EXIT', {Reason, _}} ->
 			{error, Reason};
 		_Error ->
@@ -414,8 +414,8 @@ encode_string([], RevString) ->
 	lists:reverse([?STRING_END|RevString]);
 encode_string([Char|TailString], RevString) ->
 	case Char of
-		$"  -> encode_string(TailString,  "\"\\" ++ RevString);
-		$/  -> encode_string(TailString,  "/\\"  ++ RevString);
+		$\" -> encode_string(TailString,  "\"\\" ++ RevString);
+		$\/ -> encode_string(TailString,  "\/\\"  ++ RevString);
 		$\\ -> encode_string(TailString,  "\\\\" ++ RevString);
 
 		$\b -> encode_string(TailString,  "b\\" ++ RevString);
