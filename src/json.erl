@@ -19,6 +19,7 @@
 -define(STRING_START, $\").
 -define(STRING_END,   $\").
 -define(REV_SOLIDUS, $\\).
+-define(REV_REPLACE_CHAR, [189,191,239]).
 %-----------------------------------------------------------------------------
 -define(ARRAY_START, $[).
 -define(ARRAY_END,   $]).
@@ -55,7 +56,7 @@
 -define(HACK_EXP(ReverseNumber), [?EXP|[?ZERO|[?DOT|ReverseNumber]]]).
 -define(ZERO_FRAC, [?DOT, ?ZERO]).
 %-----------------------------------------------------------------------------
--export([decode/1]).
+-export([decode/1, encode/1]).
 %-----------------------------------------------------------------------------
 decode(Stream) when is_binary(Stream) ->
 	decode(binary_to_list(Stream));
@@ -136,7 +137,7 @@ parse_number_1(_) ->
 	?ERROR_UNEXPECTED.
 %-----------------------------------------------------------------------------
 parse_number_2([]) ->
-	{0, []};
+	{0.0, []};
 parse_number_2([Char|TailStream]) ->
 	case Char of
 		?DOT ->
@@ -347,4 +348,130 @@ parse_obj_sep([?OBJ_END|TailStream], Object) ->
 	{?OBJ_FMT(Object), TailStream};
 parse_obj_sep(_,_) ->
 	?ERROR_ENCODED.
+%-----------------------------------------------------------------------------
+encode(Element) ->
+	case catch(encode_partial(Element)) of
+		Decoded when is_list(Decoded) ->
+			{ok, Decoded};
+		{'EXIT', {Reason, _}} ->
+			{error, Reason};
+		_Error ->
+			{error, badformat}
+	end.
+%-----------------------------------------------------------------------------
+encode_partial(Element) ->
+	case Element of
+		true ->
+			"true";
+		false ->
+			"false";
+		null ->
+			"null";
+		String when is_list(String) ->
+			encode_string(String);
+		ByteString when is_binary(ByteString) ->
+			encode_string(ByteString);
+		Number when is_number(Number) ->
+			encode_number(Number);
+		?ARRAY_FMT(Array) ->
+			encode_array(Array);
+		?OBJ_FMT(Object) ->
+			encode_object(Object);
+		_ ->
+			erlang:error(badarg)
+	end.
+%-----------------------------------------------------------------------------
+encode_number(Number) ->
+	Float = Number / 1.0,
+	float_to_list(Float).
+%-----------------------------------------------------------------------------
+encode_string(ByteString) when is_binary(ByteString) ->
+	encode_string(binary_to_list(ByteString));
+encode_string(String) when is_list(String) ->
+	encode_string(String, [?STRING_START]);
+encode_string(_) ->
+	erlang:error(badarg).
+%-----------------------------------------------------------------------------
+encode_string([], RevString) ->
+	lists:reverse([?STRING_END|RevString]);
+encode_string([Char|TailString], RevString) ->
+	case Char of
+		$"  -> encode_string(TailString,  "\"\\" ++ RevString);
+		$/  -> encode_string(TailString,  "/\\"  ++ RevString);
+		$\\ -> encode_string(TailString,  "\\\\" ++ RevString);
+
+		$\b -> encode_string(TailString,  "b\\" ++ RevString);
+		$\f -> encode_string(TailString,  "f\\" ++ RevString);
+		$\n -> encode_string(TailString,  "n\\" ++ RevString);
+		$\r -> encode_string(TailString,  "r\\" ++ RevString);
+		$\t -> encode_string(TailString,  "t\\" ++ RevString);
+		
+		ControlChar when 
+			ControlChar >= 0 andalso 
+			ControlChar < 32 ->
+				erlang:error(controlchar);
+		16#ff ->
+			encode_string(TailString, 
+				?REV_REPLACE_CHAR ++ RevString);
+		Character when 
+			Character >= 32 andalso 
+			Character < 256 ->
+				encode_string(TailString, [Character|RevString]);
+		_ ->
+			erlang:error(badarg)
+	end.
+%-----------------------------------------------------------------------------
+encode_array([]) ->
+	"[]";
+encode_array([Item|Array]) ->
+	JsonItem = encode_array_item(Item),
+	encode_array(
+		Array, 
+		lists:reverse([?ARRAY_START|JsonItem])
+	);
+encode_array(_) ->
+	erlang:error(badarg).
+%-----------------------------------------------------------------------------
+encode_array([], RevJson) ->
+	lists:reverse([?ARRAY_END|RevJson]);
+encode_array([Item|Array], RevJson) ->
+	JsonItem = encode_array_item(Item),
+	encode_array(
+		Array, 
+		lists:reverse([?ARRAY_SEP|JsonItem],RevJson)
+	);
+encode_array(_,_) ->
+	erlang:error(badarg).
+%-----------------------------------------------------------------------------
+encode_array_item(Item) ->
+	encode_partial(Item).
+%-----------------------------------------------------------------------------
+encode_object([]) ->
+	"{}";
+encode_object([{Key,Value}|Object]) ->
+	JsonElement = encode_object_element(Key, Value),
+	encode_object(
+		Object, 
+		lists:reverse([?OBJ_START|JsonElement])
+	);
+encode_object(_) ->
+	erlang:error(badarg).
+%-----------------------------------------------------------------------------
+encode_object([], RevJson) ->
+	lists:reverse([?OBJ_END|RevJson]);
+encode_object([{Key,Value}|Object], RevJson) ->
+	JsonElement = encode_object_element(Key, Value),
+
+	encode_object(
+		Object, 
+		lists:reverse([?OBJ_SEP|JsonElement],RevJson)
+	);
+encode_object(_, _) ->
+	erlang:error(badarg).
+%-----------------------------------------------------------------------------
+encode_object_element(Key, Value) ->
+	JsonKey = encode_string(Key),
+	JsonValue = encode_partial(Value),
+
+	JsonKey ++ ?OBJ_KV_SEP ++ JsonValue.
 %-----------------------------------------------------------------------------
