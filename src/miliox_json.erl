@@ -8,7 +8,7 @@
 %% @author Emiliano Carlos de Moraes Firmino <elmiliox@gmail.com>
 %% @copyright Emiliano@2011
 
--module(json).
+-module(miliox_json).
 -author("elmiliox@gmail.com").
 -vsn(1).
 

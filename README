@@ -1,0 +1,35 @@
+A Encode/Decode erlang structures to JSON, Supports UTF8 and escape UTF8 using \u<value>.
+Numbers always decode as float, 
+
+Compile:
+	make all
+	
+Run test:
+	make test
+
+How to Use:
+	miliox_json:decode(JSON).
+	miliox_json:encode(Erlang).
+Examples:
+	miliox_json:decode("{}") -> {ok, {object, []}}
+	miliox_json:decode("{\"name\":\"emiliano\",\"surname\":\"firmino\"}") 
+		-> {ok,
+			{object,[
+				{"name","emiliano"},
+				{"surname","firmino"}]
+				}}
+	
+	miliox_json:decode("[]") -> {ok, {array, []}}
+	miliox_json:decode("[1,2,3]") -> {ok, {array, [1.0,2.0,3.0]}}
+	
+	miliox_json:decode("null") -> null
+	miliox_json:decode("true") -> true
+	miliox_json:decode("false") -> false
+	
+	miliox_json:decode("3") -> {ok, 3.0}
+	
+	miliox_json:decode("00") -> error
+	miliox_json:decode("[4}") -> error
+
+Notes:
+	List always is translate to String, Arrays require you enclose using {array, List}

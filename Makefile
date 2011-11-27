@@ -6,7 +6,7 @@ SHELL=/bin/sh
 
 #Erlang Configuration
 PADIR=-pa ebin
-MODULELIST=[json]
+MODULELIST=[miliox_json]
 
 run: all_test
 	erl $(PADIR)
